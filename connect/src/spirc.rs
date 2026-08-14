@@ -138,7 +138,6 @@ enum SpircCommand {
     Activate,
     Transfer(Option<TransferRequest>),
     Load(LoadRequest),
-    LoadOrActivate(LoadRequest),
     AddToQueue(SpotifyUri),
 }
 
@@ -399,16 +398,6 @@ impl Spirc {
     /// Does not overwrite the queue.
     pub fn load(&self, command: LoadRequest) -> Result<(), Error> {
         Ok(self.commands.send(SpircCommand::Load(command))?)
-    }
-
-    /// Load a new context locally, acquiring active-device control first when
-    /// necessary.
-    ///
-    /// Unlike sending [`Spirc::activate`] followed by [`Spirc::load`], this is
-    /// handled as one command. That avoids an intervening Connect-state notify
-    /// blocking the load while Spotify's command relay is degraded.
-    pub fn load_or_activate(&self, command: LoadRequest) -> Result<(), Error> {
-        Ok(self.commands.send(SpircCommand::LoadOrActivate(command))?)
     }
 
     /// Adds a track, episode, album or playlist to the queue.
@@ -738,12 +727,6 @@ impl SpircTask {
             }
             SpircCommand::Transfer(..) | SpircCommand::Activate => {
                 warn!("SpircCommand::{cmd:?} will be ignored while already active")
-            }
-            SpircCommand::LoadOrActivate(command) => {
-                if !self.connect_state.is_active() {
-                    self.handle_activate();
-                }
-                self.handle_load(command, None, None).await?
             }
             _ if !self.connect_state.is_active() => {
                 warn!("SpircCommand::{cmd:?} will be ignored while Not Active")

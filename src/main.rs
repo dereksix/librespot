@@ -3,10 +3,10 @@ use futures_util::StreamExt;
 #[cfg(feature = "alsa-backend")]
 use librespot::playback::mixer::alsamixer::AlsaMixer;
 use librespot::{
-    connect::{ConnectConfig, LoadRequest, LoadRequestOptions, Spirc},
+    connect::{ConnectConfig, Spirc},
     core::{
-        Session, SessionConfig, authentication::Credentials, cache::Cache, config::DeviceType,
-        version,
+        Session, SessionConfig, SpotifyUri, authentication::Credentials, cache::Cache,
+        config::DeviceType, version,
     },
     discovery::DnsSdServiceBuilder,
     playback::{
@@ -2009,7 +2009,8 @@ async fn main() {
     // Polling an atomically replaced local file keeps this binary dependency
     // free and lets the embedding service use Spirc's own ordered command
     // channel. Spotify still provides authentication, metadata, keys and CDN
-    // audio; only the unreliable remote command relay is bypassed.
+    // audio. Commands go straight to the player's ordered command queue so a
+    // slow Connect-state notification cannot block the next local handoff.
     let ticker_control_file = env::var("LIBRESPOT_TICKER_CONTROL_FILE").ok();
     let ticker_control_ready_file = ticker_control_file
         .as_ref()
@@ -2145,25 +2146,21 @@ async fn main() {
                             warn!("[ticker-reliability] local control cleanup failed: {why}");
                         }
                         let command = command.trim();
-                        if let Some(spirc) = spirc.as_ref() {
+                        if spirc.is_some() {
                             if let Some(uri) = command.strip_prefix("load ").map(str::trim).filter(|uri| !uri.is_empty()) {
-                                let request = LoadRequest::from_tracks(
-                                    vec![uri.to_string()],
-                                    LoadRequestOptions { start_playing: true, ..Default::default() },
-                                );
-                                if let Err(why) = spirc.load_or_activate(request) {
-                                    warn!("[ticker-reliability] local control load failed: {why}");
-                                } else {
-                                    info!("[ticker-reliability] local control load <{uri}>");
+                                match SpotifyUri::from_uri(uri) {
+                                    Ok(track_id) => {
+                                        player.load(track_id, true, 0);
+                                        info!("[ticker-reliability] local control load <{uri}>");
+                                    }
+                                    Err(why) => {
+                                        warn!("[ticker-reliability] local control load failed: {why}");
+                                    }
                                 }
                             } else if command == "pause" {
-                                if let Err(why) = spirc.pause() {
-                                    warn!("[ticker-reliability] local control pause failed: {why}");
-                                }
+                                player.pause();
                             } else if command == "play" {
-                                if let Err(why) = spirc.play() {
-                                    warn!("[ticker-reliability] local control play failed: {why}");
-                                }
+                                player.play();
                             } else {
                                 warn!("[ticker-reliability] ignored unknown local control command");
                             }
