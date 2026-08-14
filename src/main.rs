@@ -2161,6 +2161,8 @@ async fn main() {
                                 player.pause();
                             } else if command == "play" {
                                 player.play();
+                            } else if command == "stop" {
+                                player.stop();
                             } else {
                                 warn!("[ticker-reliability] ignored unknown local control command");
                             }
