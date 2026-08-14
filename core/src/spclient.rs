@@ -553,6 +553,10 @@ impl SpClient {
             debug!("Error was: {last_response:?}");
         }
 
+        if let Err(ref error) = last_response {
+            warn!("spclient request {method} {endpoint} failed after {tries} attempt(s): {error}");
+        }
+
         last_response
     }
 
