@@ -1005,7 +1005,11 @@ impl SpircTask {
             let became_inactive = self.connect_state.is_active()
                 && cluster.active_device_id != self.session.device_id();
             if became_inactive {
-                info!("device became inactive");
+                warn!(
+                    "[ticker-reliability] device became inactive: cluster active=<{}> self=<{}> reason={reason:?}",
+                    cluster.active_device_id,
+                    self.session.device_id()
+                );
                 self.handle_disconnect().await?;
                 self.handle_stop();
             } else if self.connect_state.is_active() {
@@ -1123,7 +1127,15 @@ impl SpircTask {
                 )
                 .await?;
 
-                self.connect_state.set_origin(play.play_origin)
+                self.connect_state.set_origin(play.play_origin);
+
+                // A Web API `uris` request activates an idle Connect device with
+                // a synthetic `spotify:web-api` context. A delayed state update
+                // leaves a short window where Spotify still sees no active
+                // device and can discard the next targeted play while returning
+                // HTTP 204. Transfer commands already publish synchronously;
+                // make direct Play commands claim the device before replying too.
+                return self.notify().await;
             }
             Pause(_) => self.handle_pause(),
             SeekTo(seek_to) => {

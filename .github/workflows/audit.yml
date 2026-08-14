@@ -3,9 +3,18 @@ name: Security audit
 on:
   schedule:
     - cron: "0 0 * * *"
+  pull_request:
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/audit.yml"
+  workflow_dispatch:
 jobs:
   audit:
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
     steps:
       - uses: actions/checkout@v6
         with:
@@ -13,3 +22,6 @@ jobs:
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # These are unreachable or optional in Ticker's production profile;
+          # CURRENT_CLIENT_AUDIT.md records the exact rationale and review rule.
+          ignore: RUSTSEC-2023-0071,RUSTSEC-2026-0009,RUSTSEC-2026-0049,RUSTSEC-2026-0098,RUSTSEC-2026-0099,RUSTSEC-2026-0104
