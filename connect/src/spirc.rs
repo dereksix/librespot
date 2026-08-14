@@ -739,6 +739,12 @@ impl SpircTask {
             SpircCommand::Transfer(..) | SpircCommand::Activate => {
                 warn!("SpircCommand::{cmd:?} will be ignored while already active")
             }
+            SpircCommand::LoadOrActivate(command) => {
+                if !self.connect_state.is_active() {
+                    self.handle_activate();
+                }
+                self.handle_load(command, None, None).await?
+            }
             _ if !self.connect_state.is_active() => {
                 warn!("SpircCommand::{cmd:?} will be ignored while Not Active")
             }
@@ -761,12 +767,6 @@ impl SpircTask {
             SpircCommand::SetPosition(position) => self.handle_seek(position),
             SpircCommand::SetVolume(volume) => self.set_volume(volume),
             SpircCommand::Load(command) => self.handle_load(command, None, None).await?,
-            SpircCommand::LoadOrActivate(command) => {
-                if !self.connect_state.is_active() {
-                    self.handle_activate();
-                }
-                self.handle_load(command, None, None).await?
-            }
             SpircCommand::AddToQueue(uri) => self.handle_add_to_queue(uri).await,
         };
 
