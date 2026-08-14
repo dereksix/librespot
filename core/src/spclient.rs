@@ -786,9 +786,7 @@ impl SpClient {
                 // Spotify 1.2.96 uses the versioned route. Keep the legacy
                 // interactive route as a compatibility fallback for older
                 // spclient clusters and Connect-era accounts.
-                warn!(
-                    "Storage resolve v2 failed ({v2_error}); trying legacy interactive endpoint"
-                );
+                warn!("Storage resolve v2 failed ({v2_error}); trying legacy interactive endpoint");
                 self.request(&Method::GET, &endpoints[1], None, None).await
             }
         }
