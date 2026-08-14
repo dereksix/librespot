@@ -3,6 +3,12 @@ name: Security audit
 on:
   schedule:
     - cron: "0 0 * * *"
+  pull_request:
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/audit.yml"
+  workflow_dispatch:
 jobs:
   audit:
     runs-on: ubuntu-latest
