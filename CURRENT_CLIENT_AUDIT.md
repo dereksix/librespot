@@ -77,6 +77,31 @@ their matching behavior would be less compatible, not more.
 - The previous known-good binary remains installed as
   `/usr/local/bin/librespot-8c82f2c` for immediate rollback.
 
+## Dependency security audit
+
+RustSec now runs on every compatibility pull request as well as on its daily
+schedule. The 2026-08-14 review updated the compatible patched releases of
+`bytes`, `quick-xml`, `anyhow`, `event-listener`, `rand` and the production
+`rustls-webpki` line. The `quick-xml` migration explicitly selects XML 1.0 for
+Spotify product-info parsing.
+
+Six advisories remain explicitly ignored, rather than silently disappearing:
+
+- `RUSTSEC-2023-0071`: librespot constructs an `RsaPublicKey` and verifies the
+  Spotify access-point signature. It never performs the private-key operation
+  affected by the Marvin timing attack, and the `rsa` crate has no patched
+  release.
+- `RUSTSEC-2026-0009`: the patch begins at `time` 0.3.47, which requires Rust
+  1.88 and would raise librespot's supported Rust 1.85 baseline. Ticker parses
+  bounded Spotify-controlled dates, not attacker-supplied RFC 2822 input.
+- `RUSTSEC-2026-0049`, `RUSTSEC-2026-0098`, `RUSTSEC-2026-0099` and
+  `RUSTSEC-2026-0104`: these remain only in `rustls-webpki` 0.102 through
+  `hyper-proxy2`'s optional rustls feature. Ticker's production build uses
+  native TLS, and the active rustls 0.103 line is updated to 0.103.13.
+
+Review these ignores whenever the minimum Rust version, TLS backend or proxy
+stack changes. New advisories still fail CI.
+
 ## Promotion rule
 
 Every network compatibility change must pass unit tests, the silent production
