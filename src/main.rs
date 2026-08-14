@@ -3,7 +3,7 @@ use futures_util::StreamExt;
 #[cfg(feature = "alsa-backend")]
 use librespot::playback::mixer::alsamixer::AlsaMixer;
 use librespot::{
-    connect::{ConnectConfig, Spirc},
+    connect::{ConnectConfig, LoadRequest, LoadRequestOptions, Spirc},
     core::{
         Session, SessionConfig, authentication::Credentials, cache::Cache, config::DeviceType,
         version,
@@ -2003,6 +2003,30 @@ async fn main() {
         (backend)(device, format)
     });
 
+    // Optional localhost-only command bridge for appliance integrations. The
+    // Spotify Web API can acknowledge a second direct `uris` request with 204
+    // while never relaying it to an already-active synthetic web-api context.
+    // Polling an atomically replaced local file keeps this binary dependency
+    // free and lets the embedding service use Spirc's own ordered command
+    // channel. Spotify still provides authentication, metadata, keys and CDN
+    // audio; only the unreliable remote command relay is bypassed.
+    let ticker_control_file = env::var("LIBRESPOT_TICKER_CONTROL_FILE").ok();
+    let ticker_control_ready_file = ticker_control_file
+        .as_ref()
+        .map(|path| format!("{path}.ready"));
+    let mut ticker_control_tick = tokio::time::interval(Duration::from_millis(25));
+    ticker_control_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    if let Some(path) = ticker_control_ready_file.as_ref() {
+        if let Err(why) = std::fs::write(path, std::process::id().to_string()) {
+            warn!("[ticker-reliability] local control readiness failed: {why}");
+        } else {
+            info!(
+                "[ticker-reliability] local control ready at <{}>",
+                ticker_control_file.as_deref().unwrap_or_default()
+            );
+        }
+    }
+
     if let Some(player_event_program) = setup.player_event_program.clone() {
         _event_handler = Some(EventHandler::new(
             player.get_player_event_channel(),
@@ -2113,6 +2137,50 @@ async fn main() {
                 error!("Player shut down unexpectedly");
                 exit(1);
             },
+            _ = ticker_control_tick.tick(), if ticker_control_file.is_some() => {
+                let path = ticker_control_file.as_deref().unwrap_or_default();
+                match std::fs::read_to_string(path) {
+                    Ok(command) => {
+                        if let Err(why) = std::fs::remove_file(path) {
+                            warn!("[ticker-reliability] local control cleanup failed: {why}");
+                        }
+                        let command = command.trim();
+                        if let Some(spirc) = spirc.as_ref() {
+                            if let Some(uri) = command.strip_prefix("load ").map(str::trim).filter(|uri| !uri.is_empty()) {
+                                // Command ordering on Spirc's unbounded channel is
+                                // deterministic: activation is handled before load
+                                // when this is the first song of a fresh session.
+                                if let Err(why) = spirc.activate() {
+                                    warn!("[ticker-reliability] local control activate failed: {why}");
+                                }
+                                let request = LoadRequest::from_tracks(
+                                    vec![uri.to_string()],
+                                    LoadRequestOptions { start_playing: true, ..Default::default() },
+                                );
+                                if let Err(why) = spirc.load(request) {
+                                    warn!("[ticker-reliability] local control load failed: {why}");
+                                } else {
+                                    info!("[ticker-reliability] local control load <{uri}>");
+                                }
+                            } else if command == "pause" {
+                                if let Err(why) = spirc.pause() {
+                                    warn!("[ticker-reliability] local control pause failed: {why}");
+                                }
+                            } else if command == "play" {
+                                if let Err(why) = spirc.play() {
+                                    warn!("[ticker-reliability] local control play failed: {why}");
+                                }
+                            } else {
+                                warn!("[ticker-reliability] ignored unknown local control command");
+                            }
+                        } else {
+                            warn!("[ticker-reliability] local control command arrived before Spirc was ready");
+                        }
+                    }
+                    Err(why) if why.kind() == std::io::ErrorKind::NotFound => (),
+                    Err(why) => warn!("[ticker-reliability] local control read failed: {why}"),
+                }
+            },
             _ = tokio::signal::ctrl_c() => {
                 break;
             },
@@ -2121,6 +2189,10 @@ async fn main() {
     }
 
     info!("Gracefully shutting down");
+
+    if let Some(path) = ticker_control_ready_file.as_ref() {
+        let _ = std::fs::remove_file(path);
+    }
 
     let mut shutdown_tasks = tokio::task::JoinSet::new();
 
