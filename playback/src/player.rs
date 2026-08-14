@@ -1094,7 +1094,8 @@ impl PlayerTrackLoader {
         // while opening a cached file.
         loop {
             let session = self.session.read().unwrap().clone();
-            let encrypted_file = AudioFile::open(&session, file_id, bytes_per_second);
+            let encrypted_file =
+                AudioFile::open(&session, file_id, format.into(), bytes_per_second);
 
             let encrypted_file = match encrypted_file.await {
                 Ok(encrypted_file) => encrypted_file,
