@@ -2147,17 +2147,11 @@ async fn main() {
                         let command = command.trim();
                         if let Some(spirc) = spirc.as_ref() {
                             if let Some(uri) = command.strip_prefix("load ").map(str::trim).filter(|uri| !uri.is_empty()) {
-                                // Command ordering on Spirc's unbounded channel is
-                                // deterministic: activation is handled before load
-                                // when this is the first song of a fresh session.
-                                if let Err(why) = spirc.activate() {
-                                    warn!("[ticker-reliability] local control activate failed: {why}");
-                                }
                                 let request = LoadRequest::from_tracks(
                                     vec![uri.to_string()],
                                     LoadRequestOptions { start_playing: true, ..Default::default() },
                                 );
-                                if let Err(why) = spirc.load(request) {
+                                if let Err(why) = spirc.load_or_activate(request) {
                                     warn!("[ticker-reliability] local control load failed: {why}");
                                 } else {
                                     info!("[ticker-reliability] local control load <{uri}>");
