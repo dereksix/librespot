@@ -408,9 +408,7 @@ impl Spirc {
     /// handled as one command. That avoids an intervening Connect-state notify
     /// blocking the load while Spotify's command relay is degraded.
     pub fn load_or_activate(&self, command: LoadRequest) -> Result<(), Error> {
-        Ok(self
-            .commands
-            .send(SpircCommand::LoadOrActivate(command))?)
+        Ok(self.commands.send(SpircCommand::LoadOrActivate(command))?)
     }
 
     /// Adds a track, episode, album or playlist to the queue.
