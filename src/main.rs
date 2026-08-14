@@ -750,6 +750,12 @@ async fn get_setup() -> Setup {
     setup_logging(opt_present(QUIET), opt_present(VERBOSE));
 
     info!("{}", get_version_string());
+    info!(
+        "[ticker-reliability] protocol profile desktop={} numeric={} spirc={}",
+        version::spotify_semantic_version(),
+        version::SPOTIFY_VERSION,
+        version::SPOTIFY_SPIRC_VERSION
+    );
 
     if !env_vars.is_empty() {
         trace!("Environment variable(s):");
