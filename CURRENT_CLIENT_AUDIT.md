@@ -66,16 +66,17 @@ their matching behavior would be less compatible, not more.
 
 ## Production validation
 
-- Candidate: `librespot 0.8.0 d5665d0`, SHA-256
-  `a7c646bee21d63463d2a84784499b4667d4384fba5fc96cc55b001de19b169f5`.
-- Silent post-deploy canary on 2026-08-14 produced fresh PCM in 679 ms on the
+- Production: `librespot 0.8.0 3bf426c`, SHA-256
+  `70ca44fe5cd92c29c59694b5e65bed8730a946958e585942c6dbb58b60b2601f`.
+- Silent post-deploy canary on 2026-08-14 produced fresh PCM in 702 ms on the
   first attempt; no retry or local download was used.
 - The endpoint-aware run proved the repeated 400 was the optional autoplay
   request, not storage, CDN, audio-key, metadata, authentication or Dealer.
 - Production now disables librespot autoplay. A subsequent canary produced PCM
   without another `/context-resolve/v1/autoplay` request.
-- The previous known-good binary remains installed as
-  `/usr/local/bin/librespot-8c82f2c` for immediate rollback.
+- The immediately previous known-good binary remains installed as
+  `/usr/local/bin/librespot-d5665d0`; `/usr/local/bin/librespot-8c82f2c` is
+  retained as a second rollback point.
 
 ## Dependency security audit
 
