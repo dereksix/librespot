@@ -28,10 +28,10 @@ obtain an audio key, fetch encrypted audio, decode it, and produce fresh PCM.
 | Storage resolve | The desktop uses `storage-resolve/v2/files/audio/interactive/{format}/{file_id}`; upstream librespot used the older `/storage-resolve/files/audio/interactive/{file_id}` route. | Updated in this fork | Pass the selected audio-format ID into storage resolution, try v2 first, and retain the legacy route as an automatic fallback. The PCM canary validates the returned protobuf and downstream CDN path end to end. |
 | CDN edge selection | Spotify returns multiple signed CDN URLs using several token formats. Librespot understands `verify`, `__token__`, `Expires`, and timestamp query formats. | Current | Upstream PRs #1524, #1513 and #1722 already provide multi-edge and bad-status fallback. |
 | CDN range fetching | Initial fetches fall through across edges and require HTTP 206. Later ranges reuse the selected signed URL. | Acceptable with a known edge | There is an upstream TODO to re-resolve a URL if its signature expires mid-stream. Ordinary bar tracks complete far inside the URL lifetime; implement only after a reproducible long-form failure. |
-| Audio keys | The desktop includes newer PlayPlay/media-manifest machinery, while legacy Connect devices still use the AP/Hermes key paths. Ticker's live canary obtained a key today. | Current for lossy Connect playback | Do not attempt to copy or circumvent PlayPlay DRM. Spotify explicitly asked upstream not to pursue technical-protection circumvention. |
+| Audio keys | The desktop includes newer PlayPlay/media-manifest machinery, while legacy Connect devices still use the AP/Hermes key paths. Ticker's live canary obtained keys for 10 consecutive unique tracks today. A separate 40-track, roughly one-change-per-second capacity probe eventually received service-unavailable responses from Spotify's key service. | Current for normal lossy Connect playback; externally rate-limited under synthetic abuse | Do not pace or restart the client in response to service throttling. Ticker keeps MPD audible, opens a one-minute circuit breaker, and races its independent safety source. Do not attempt to copy or circumvent PlayPlay DRM. |
 | Audio formats | The desktop advertises newer FLAC, xHE-AAC, 24-bit and PHONO enum values. Librespot's decoder path supports the formats it requests today. | Intentionally limited | Do not advertise formats the fetch, key and decoder stack cannot safely play. 320 kbps Vorbis remains Ticker's selected bar profile. |
 | Discovery | Zeroconf is healthy on Ticker's LAN. Open PR #1724 adds a dual-stack IPv6 bind fallback. | Not implicated | Defer unless the host enables problematic IPv6 discovery; the Web API/device-registration watchdog already verifies availability. |
-| Audio backend | Ticker runs librespot's `subprocess` backend into a PCM bridge/PipeWire path, not librespot's ALSA backend. | Current | ALSA-only PRs such as #1703 do not affect production. |
+| Audio backend | Ticker runs librespot's `subprocess` backend into a PCM bridge and the same X32 PipeWire sink used by MPD, not librespot's ALSA backend. This removed the exclusive ALSA lock that previously froze the bridge after exactly 63,744 bytes. | Current | Keep MPD and librespot on the shared PipeWire sink. ALSA-only PRs such as #1703 do not affect production. |
 
 ## What “CDN compatibility” means here
 
@@ -66,17 +66,20 @@ their matching behavior would be less compatible, not more.
 
 ## Production validation
 
-- Production: `librespot 0.8.0 3bf426c`, SHA-256
-  `70ca44fe5cd92c29c59694b5e65bed8730a946958e585942c6dbb58b60b2601f`.
-- Silent post-deploy canary on 2026-08-14 produced fresh PCM in 702 ms on the
-  first attempt; no retry or local download was used.
+- Production: `librespot 0.8.0 7a31b92`, SHA-256
+  `c86384abfd099f0e8d3b332f6c1552294844a47daa4da4b52da852e022432c6a`.
+- The final release gate on 2026-08-14 passed 10/10 consecutive unique-track
+  PCM starts in 504–1,104 ms with zero retries. The complete Ticker gate passed
+  all five stages and restored queue, radio, wall and X32 state.
+- A real `/wall` plus compact-jukebox guest journey passed 16/16 searches and
+  2/2 Play taps. The remote Spotify handoff was verified audible in 2,015 ms
+  with 0 ms measured dead air because MPD remained hot until fresh PCM existed.
 - The endpoint-aware run proved the repeated 400 was the optional autoplay
   request, not storage, CDN, audio-key, metadata, authentication or Dealer.
 - Production now disables librespot autoplay. A subsequent canary produced PCM
   without another `/context-resolve/v1/autoplay` request.
-- The immediately previous known-good binary remains installed as
-  `/usr/local/bin/librespot-d5665d0`; `/usr/local/bin/librespot-8c82f2c` is
-  retained as a second rollback point.
+- The accepted binary is also retained as
+  `/usr/local/bin/librespot-7a31b92` for an exact rollback/install source.
 
 ## Dependency security audit
 

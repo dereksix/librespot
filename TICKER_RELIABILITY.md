@@ -32,6 +32,12 @@ Current carried changes:
   signed CDN query parameters, authorization headers or response bodies. This
   isolated Ticker's recurring 400 to the optional autoplay-context request;
   production disables librespot autoplay because Ticker owns that queue.
+- Local control loads are atomic and ordered, bypassing the stale Connect-state
+  relay while retaining Spotify authentication, metadata, storage, CDN and
+  audio-key handling. A local stop command clears the decoder without requiring
+  a second Connect owner.
+- The accepted production source is `7a31b92`; the installed binary SHA-256 is
+  `c86384abfd099f0e8d3b332f6c1552294844a47daa4da4b52da852e022432c6a`.
 
 ## Current-client drift audit (2026-08-14)
 
@@ -74,8 +80,12 @@ node scripts/jukebox-soak.js --profile=live --allow-live-audio --low-volume=.18 
 
 Promotion requires repeated cold Spotify fixtures, zero backend timeouts, no
 audio-engine gap over two seconds, correct last-request-wins behavior, and no
-regression in first-track time to verified PCM. Restore the previous binary
-immediately if any gate fails.
+regression in first-track time to verified PCM. The normal release gate uses a
+10-track direct compatibility sample because the complete run also exercises
+real guest and rapid-handoff paths. A 40-track unique-song burst is a deliberate
+capacity test that can throttle Spotify's audio-key service and must not be used
+as the routine release gate. Restore the previous binary immediately if any
+required gate fails.
 
 ## Upstream sync
 
