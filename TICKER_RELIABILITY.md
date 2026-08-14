@@ -21,6 +21,34 @@ Current carried changes:
   failure instead of leaving a healthy-looking but undiscoverable process.
 - Tagged transfer/context/connect-state diagnostics for correlating Spotify
   control-plane failures with Ticker's PCM timeline.
+- A startup breadcrumb records the exact emulated desktop, numeric protocol and
+  SPIRC versions so a production trace can always be tied to its wire profile.
+
+## Current-client drift audit (2026-08-14)
+
+The official Spotify 1.2.96.518 Windows x64 installer was downloaded from
+Spotify's CDN using the current WinGet manifest and matched its published
+SHA-256. The same `arkadiyt/protodump` process cited in upstream PR #1424 was
+run against the signed `Spotify.dll` without launching or authenticating the
+client.
+
+- The current client yielded 708 protobuf definitions; librespot's
+  1.2.52.442 import contains 478.
+- The Connect and player messages retain the field numbers librespot uses. The
+  observed changes are predominantly additive, so unknown-field compatibility
+  protects the current playback path.
+- New Connect capabilities include ping, playlist mixing, remote audio quality,
+  Zephyr, gapless playback and crossfade. Do not advertise these until the
+  matching behaviors exist.
+- Spotify now ships a larger playback-context stack, which warrants continued
+  black-box recovery testing even though it does not justify a blind wholesale
+  protobuf replacement.
+- Do not bump only the emulated version or property-set identifier: those are
+  coupled to the matching client behavior and schema set.
+
+The generated dump remains an audit artifact. Import only the smallest schema
+or behavior required by a reproduced failure and promote it through Ticker's
+PCM-gated compatibility canary and attended live soak.
 
 ## Promotion gate
 
