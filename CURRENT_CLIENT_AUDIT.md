@@ -23,6 +23,7 @@ obtain an audio key, fetch encrypted audio, decode it, and produce fresh PCM.
 | OAuth refresh | Spotify may omit a replacement refresh token when refreshing an access token. Unpatched librespot replaced the saved token with an empty string. | Fixed in this fork | Import upstream PR #1732 and retain the prior refresh token when the response omits one. |
 | Dealer WebSocket | Dealer discovery and the access-token WebSocket remain current. Ticker also carries recovery for transient connection-ID failures and session loss. | Hardened | Continue soak testing. PR #1692 overlaps the carried session-recovery work, currently conflicts with `dev`, and previously needed account-handover fixes; do not stack it blindly. |
 | Mercury / Connect state | Current protobufs retain the field numbers used by librespot. The desktop adds capabilities and fields, but the observed core changes are additive. | Compatible | Preserve unknown-field compatibility. Import individual fields only for reproduced failures. |
+| Autoplay context | Endpoint-aware diagnostics isolated the recurring HTTP 400 to `POST /context-resolve/v1/autoplay`. The same requested track still produced fresh PCM, and upstream issue #1205 records this non-fatal response across several releases. | Optional and rejected for this client profile | Ticker owns its queue and Auto-DJ, so production now runs librespot with `--autoplay off`. Do not classify this 400 as a failed song start; PCM remains authoritative. |
 | Metadata | The desktop contains both `extended-metadata/v0/extended-metadata` and a newer v3 batch-extension route. The v0 route works in production. | Current enough | Keep v0 until a missing entity or server retirement is reproduced; then implement a typed v3 fallback. |
 | Storage resolve | The desktop uses `storage-resolve/v2/files/audio/interactive/{format}/{file_id}`; upstream librespot used the older `/storage-resolve/files/audio/interactive/{file_id}` route. | Updated in this fork | Pass the selected audio-format ID into storage resolution, try v2 first, and retain the legacy route as an automatic fallback. The PCM canary validates the returned protobuf and downstream CDN path end to end. |
 | CDN edge selection | Spotify returns multiple signed CDN URLs using several token formats. Librespot understands `verify`, `__token__`, `Expires`, and timestamp query formats. | Current | Upstream PRs #1524, #1513 and #1722 already provide multi-edge and bad-status fallback. |
@@ -31,6 +32,25 @@ obtain an audio key, fetch encrypted audio, decode it, and produce fresh PCM.
 | Audio formats | The desktop advertises newer FLAC, xHE-AAC, 24-bit and PHONO enum values. Librespot's decoder path supports the formats it requests today. | Intentionally limited | Do not advertise formats the fetch, key and decoder stack cannot safely play. 320 kbps Vorbis remains Ticker's selected bar profile. |
 | Discovery | Zeroconf is healthy on Ticker's LAN. Open PR #1724 adds a dual-stack IPv6 bind fallback. | Not implicated | Defer unless the host enables problematic IPv6 discovery; the Web API/device-registration watchdog already verifies availability. |
 | Audio backend | Ticker runs librespot's `subprocess` backend into a PCM bridge/PipeWire path, not librespot's ALSA backend. | Current | ALSA-only PRs such as #1703 do not affect production. |
+
+## What “CDN compatibility” means here
+
+Librespot does not contain a permanent Spotify media hostname. It asks
+`storage-resolve` for a protobuf containing short-lived, signed edge URLs, then
+tries the returned edges and requests byte ranges. The reversed-engineered part
+is the storage-resolve request/response contract, token-expiry recognition,
+encrypted range mapping and audio-key flow—not a hard-coded list of CDN hosts.
+
+The 2026 audit found one real route drift and fixed it: the selected audio format
+is now included in Spotify's v2 storage route. The old storage route remains a
+fallback. Multi-edge fallback, signed-token parsing and non-206 failover are
+already present. The accepted candidate then traversed storage resolution, the
+returned CDN edge, audio-key retrieval, decryption and decoding to fresh PCM;
+that is stronger evidence than merely observing a successful HTTP response.
+
+Safe diagnostics log only the HTTP method and route path on failure. Query
+strings, signed CDN URLs, authorization headers and response bodies are never
+logged, because those can carry bearer-like media tokens.
 
 ## Protocol drift
 
@@ -43,6 +63,19 @@ The relevant Connect/player messages preserve the identifiers and field numbers
 used by librespot. New capabilities include ping, playlist mixing, remote audio
 quality, Zephyr, gapless playback and crossfade. Advertising those flags without
 their matching behavior would be less compatible, not more.
+
+## Production validation
+
+- Candidate: `librespot 0.8.0 d5665d0`, SHA-256
+  `a7c646bee21d63463d2a84784499b4667d4384fba5fc96cc55b001de19b169f5`.
+- Silent post-deploy canary on 2026-08-14 produced fresh PCM in 679 ms on the
+  first attempt; no retry or local download was used.
+- The endpoint-aware run proved the repeated 400 was the optional autoplay
+  request, not storage, CDN, audio-key, metadata, authentication or Dealer.
+- Production now disables librespot autoplay. A subsequent canary produced PCM
+  without another `/context-resolve/v1/autoplay` request.
+- The previous known-good binary remains installed as
+  `/usr/local/bin/librespot-8c82f2c` for immediate rollback.
 
 ## Promotion rule
 

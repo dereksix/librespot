@@ -28,6 +28,10 @@ Current carried changes:
 - Audio storage resolution follows the current desktop client's versioned v2
   route first and automatically falls back to the proven legacy interactive
   route.
+- Spclient failures identify the HTTP method and route path without exposing
+  signed CDN query parameters, authorization headers or response bodies. This
+  isolated Ticker's recurring 400 to the optional autoplay-context request;
+  production disables librespot autoplay because Ticker owns that queue.
 
 ## Current-client drift audit (2026-08-14)
 

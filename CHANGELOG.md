@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [main] Fixed `--volume-ctrl fixed` not disabling volume control
 - [core] Fix default permissions on credentials file and warn user if file is world readable
 - [core] Try all resolved addresses for the dealer connection instead of failing after the first one.
+- [core] Resolve interactive audio through the current versioned storage route, including the selected audio format, with legacy fallback.
+- [core] Identify failed spclient method/path safely without logging signed query parameters or response bodies.
 - [audio] Try the next CDN URL when a fetch returns a non-206 status instead of only retrying on transport errors, fixing playback failures when the first CDN URL is reachable but does not stream audio.
 - [connect] Keep the Spirc running after a transient connection-id update failure instead of shutting it down, so the device no longer silently disappears from Spotify Connect until a manual restart.
 - [discovery] Return an HTTP error response instead of panicking on malformed discovery login requests.
