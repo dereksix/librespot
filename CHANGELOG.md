@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [core] Fix default permissions on credentials file and warn user if file is world readable
 - [core] Try all resolved addresses for the dealer connection instead of failing after the first one.
 - [audio] Try the next CDN URL when a fetch returns a non-206 status instead of only retrying on transport errors, fixing playback failures when the first CDN URL is reachable but does not stream audio.
+- [connect] Keep the Spirc running after a transient connection-id update failure instead of shutting it down, so the device no longer silently disappears from Spotify Connect until a manual restart.
+- [discovery] Return an HTTP error response instead of panicking on malformed discovery login requests.
 
 ## [0.8.0] - 2025-11-10
 

@@ -477,7 +477,6 @@ impl SpircTask {
                     connection_id_update,
                     match |connection_id| if let Err(why) = self.handle_connection_id_update(connection_id).await {
                         error!("failed handling connection id update: {why}");
-                        break;
                     }
                 },
                 // main dealer update of any remote device updates
@@ -1165,6 +1164,29 @@ impl SpircTask {
     }
 
     fn handle_transfer(&mut self, mut transfer: TransferState) -> Result<(), Error> {
+        let incoming_context = transfer
+            .current_session
+            .context
+            .uri
+            .as_deref()
+            .unwrap_or("");
+        let incoming_pages = transfer.current_session.context.pages.len();
+        let incoming_tracks = transfer
+            .current_session
+            .context
+            .pages
+            .iter()
+            .map(|page| page.tracks.len())
+            .sum::<usize>();
+        info!(
+            "[ticker-reliability] transfer context=<{}> pages={} tracks={} paused={} position_ms={:?}",
+            incoming_context,
+            incoming_pages,
+            incoming_tracks,
+            transfer.playback.is_paused(),
+            transfer.playback.position_as_of_timestamp
+        );
+
         let mut ctx_uri = match transfer.current_session.context.uri {
             None => Err(SpircError::NoUri("transfer context"))?,
             // can apparently happen when a state is transferred and was started with "uris" via the api
@@ -1903,10 +1925,24 @@ impl SpircTask {
 
         self.connect_state.set_now(self.now_ms() as u64);
 
-        self.connect_state
-            .send_state(&self.session)
-            .await
-            .map(|_| ())
+        let context_uri = self.connect_state.context_uri().clone();
+        let context_ready = self.connect_state.get_context(ContextType::Default).is_ok();
+        let track_uri = self
+            .connect_state
+            .player()
+            .track
+            .as_ref()
+            .map(|track| track.uri.as_str())
+            .unwrap_or("")
+            .to_string();
+        let result = self.connect_state.send_state(&self.session).await;
+        if let Err(ref why) = result {
+            error!(
+                "[ticker-reliability] connect-state notify failed: {why}; status={:?} context_ready={} context=<{}> track=<{}>",
+                self.play_status, context_ready, context_uri, track_uri
+            );
+        }
+        result.map(|_| ())
     }
 
     fn set_volume(&mut self, volume: u16) {

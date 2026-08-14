@@ -165,7 +165,20 @@ impl ConnectState {
 
         let ctx = match self.get_context(new_context) {
             Err(why) => {
-                warn!("couldn't load context info because: {why}");
+                // reset_context() intentionally selects Default before a Web
+                // API `uris` transfer has rebuilt its synthetic context. That
+                // short-lived state is expected and used to produce a noisy
+                // warning immediately before otherwise healthy playback.
+                // Keep a tagged debug breadcrumb for Ticker correlation while
+                // reserving WARN for a missing context with a real URI.
+                if self.context_uri().is_empty() {
+                    debug!("[ticker-reliability] context not ready during activation: {why}");
+                } else {
+                    warn!(
+                        "[ticker-reliability] couldn't activate context uri=<{}>: {why}",
+                        self.context_uri()
+                    );
+                }
                 return;
             }
             Ok(ctx) => ctx,
