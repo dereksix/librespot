@@ -1,4 +1,8 @@
-use std::{collections::HashMap, io::Write, time::Duration};
+use std::{
+    collections::HashMap,
+    io::Write,
+    time::{Duration, Instant},
+};
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use bytes::Bytes;
@@ -43,7 +47,21 @@ component! {
     AudioKeyManager : AudioKeyManagerInner {
         sequence: SeqGenerator<u32> = SeqGenerator::new(0),
         pending: HashMap<u32, oneshot::Sender<Result<AudioKey, Error>>> = HashMap::new(),
+        next_request_at: Instant = Instant::now(),
     }
+}
+
+// Spotify starts rejecting rapid unique-track key requests before the rest of
+// the access-point session becomes unhealthy. Keep the first request instant,
+// but serialize abusive skip storms below the observed service threshold. A
+// human-scale song change normally arrives long after this window and pays no
+// delay.
+const MIN_KEY_REQUEST_INTERVAL: Duration = Duration::from_millis(2100);
+
+fn reserve_request_slot(next_request_at: &mut Instant, now: Instant) -> Duration {
+    let scheduled_at = (*next_request_at).max(now);
+    *next_request_at = scheduled_at + MIN_KEY_REQUEST_INTERVAL;
+    scheduled_at.saturating_duration_since(now)
 }
 
 impl AudioKeyManager {
@@ -88,6 +106,20 @@ impl AudioKeyManager {
             return Err(AudioKeyError::SessionInvalid.into());
         }
 
+        let delay =
+            self.lock(|inner| reserve_request_slot(&mut inner.next_request_at, Instant::now()));
+        if !delay.is_zero() {
+            debug!(
+                "[ticker-reliability] pacing audio key request for {} ms",
+                delay.as_millis()
+            );
+            tokio::time::sleep(delay).await;
+            if self.session().is_invalid() {
+                error!("Audio key request rejected after pacing: session is invalid");
+                return Err(AudioKeyError::SessionInvalid.into());
+            }
+        }
+
         let (tx, rx) = oneshot::channel();
 
         let seq = self.lock(move |inner| {
@@ -115,5 +147,31 @@ impl AudioKeyManager {
         data.write_u16::<BigEndian>(0x0000)?;
 
         self.session().send_packet(PacketType::RequestKey, data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn audio_key_slots_are_immediate_then_paced() {
+        let now = Instant::now();
+        let mut next = now;
+        assert_eq!(reserve_request_slot(&mut next, now), Duration::ZERO);
+        assert_eq!(
+            reserve_request_slot(&mut next, now),
+            MIN_KEY_REQUEST_INTERVAL
+        );
+    }
+
+    #[test]
+    fn an_idle_session_does_not_inherit_old_pacing_debt() {
+        let now = Instant::now();
+        let mut next = now;
+        reserve_request_slot(&mut next, now);
+        let later = now + MIN_KEY_REQUEST_INTERVAL + Duration::from_secs(1);
+        assert_eq!(reserve_request_slot(&mut next, later), Duration::ZERO);
+        assert_eq!(next, later + MIN_KEY_REQUEST_INTERVAL);
     }
 }
