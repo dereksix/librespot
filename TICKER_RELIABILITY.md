@@ -23,6 +23,11 @@ Current carried changes:
   control-plane failures with Ticker's PCM timeline.
 - A startup breadcrumb records the exact emulated desktop, numeric protocol and
   SPIRC versions so a production trace can always be tied to its wire profile.
+- Upstream PR #1732 preserves an existing OAuth refresh token when Spotify's
+  refresh response omits a replacement.
+- Audio storage resolution follows the current desktop client's versioned v2
+  route first and automatically falls back to the proven legacy interactive
+  route.
 
 ## Current-client drift audit (2026-08-14)
 
@@ -49,6 +54,10 @@ client.
 The generated dump remains an audit artifact. Import only the smallest schema
 or behavior required by a reproduced failure and promote it through Ticker's
 PCM-gated compatibility canary and attended live soak.
+
+See [CURRENT_CLIENT_AUDIT.md](CURRENT_CLIENT_AUDIT.md) for the endpoint,
+authentication, Dealer, metadata, storage/CDN, audio-key, format, discovery and
+audio-backend decision matrix.
 
 ## Promotion gate
 
